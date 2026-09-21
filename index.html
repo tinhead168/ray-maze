@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#120c1d">
+  <meta name="description" content="RAY//MAZE, a portrait-powered arcade maze game.">
+  <title>RAY//MAZE</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23120c1d'/%3E%3Cpath d='M6 6h20v7H13v6h13v7H6z' fill='%23ff695f'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="arcade" aria-label="RAY MAZE arcade game">
+    <header class="masthead">
+      <div class="brand" aria-label="Ray Maze">RAY<span>//</span>MAZE</div>
+      <button class="icon-button" id="soundButton" type="button" aria-pressed="true" aria-label="Mute sound">SOUND ON</button>
+    </header>
+
+    <section class="scoreboard" aria-label="Game score">
+      <div><span>SCORE</span><strong id="score">000000</strong></div>
+      <div class="high"><span>HIGH SCORE</span><strong id="highScore">000000</strong></div>
+      <div class="lives-block"><span>LIVES</span><div id="lives" class="lives" aria-label="3 lives"></div></div>
+    </section>
+
+    <section class="cabinet">
+      <div class="screen-bezel">
+        <div class="screen-wrap" id="screenWrap">
+          <canvas id="game" width="1008" height="1104" aria-label="RAY MAZE game board"></canvas>
+          <div class="overlay" id="overlay">
+            <p class="eyebrow" id="overlayEyebrow">PORTRAIT-POWERED ARCADE</p>
+            <h1 id="overlayTitle">CLEAR THE WALL</h1>
+            <p id="overlayText">Eat every red square. Dodge the four glitches. Grab a large square to turn the chase around.</p>
+            <button id="overlayButton" type="button">START GAME</button>
+            <p class="key-hint">ARROWS / WASD / SWIPE</p>
+          </div>
+          <div class="toast" id="toast" role="status" aria-live="polite"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="controls" aria-label="Touch controls">
+      <button class="control up" data-direction="up" type="button" aria-label="Move up">▲</button>
+      <button class="control left" data-direction="left" type="button" aria-label="Move left">◀</button>
+      <button class="control down" data-direction="down" type="button" aria-label="Move down">▼</button>
+      <button class="control right" data-direction="right" type="button" aria-label="Move right">▶</button>
+    </section>
+
+    <footer>
+      <span>P / ESC pauses</span>
+      <span>Built from the wall. Starring Ray.</span>
+    </footer>
+  </main>
+  <script src="game.js"></script>
+</body>
+</html>
