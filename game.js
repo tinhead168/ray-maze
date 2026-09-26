@@ -62,7 +62,16 @@
   const CORNERS = [{x:19,y:1}, {x:1,y:1}, {x:19,y:21}, {x:1,y:21}];
 
   const spriteAtlas = new Image();
+  let spriteFailed = false;
+  spriteAtlas.addEventListener("error", () => { spriteFailed = true; });
   spriteAtlas.src = "assets/ray-sprites.png";
+
+  // Offscreen layer for the static maze: background, walls, uneaten regular pellets.
+  // Re-rendered only on board reset or pellet pickup — never per frame.
+  const mazeLayer = document.createElement("canvas");
+  mazeLayer.width = WIDTH * DPR;
+  mazeLayer.height = HEIGHT * DPR;
+  const mazeCtx = mazeLayer.getContext("2d");
 
   let grid = [];
   let player;
@@ -103,6 +112,7 @@
       return cell;
     }));
     pelletsLeft = grid.flat().filter(cell => cell === "." || cell === "o").length;
+    renderMazeLayer();
     score = 0;
     lives = 3;
     frightenedUntil = 0;
@@ -232,6 +242,7 @@
     if (cell !== "." && cell !== "o") return;
     grid[actor.y][actor.x] = " ";
     pelletsLeft--;
+    renderMazeLayer();
     addScore(cell === "o" ? 50 : 10);
     chompFlip = !chompFlip;
     if (now - lastChomp > 62) {
@@ -258,21 +269,26 @@
 
   function checkCollisions(now) {
     const p = actorPosition(player);
+    const touching = [];
     for (const ghost of ghosts) {
       const g = actorPosition(ghost);
       let dx = Math.abs(p.x - g.x);
       dx = Math.min(dx, COLS - dx);
-      if (Math.hypot(dx, p.y - g.y) > .64) continue;
-      if (now < frightenedUntil) {
+      if (Math.hypot(dx, p.y - g.y) <= .64) touching.push(ghost);
+    }
+    if (!touching.length) return;
+    // Decide after checking ALL ghosts: a lethal ghost must never be masked
+    // by a frightened one sharing the same tile in the same frame.
+    if (now < frightenedUntil) {
+      for (const ghost of touching) {
         frightenedChain++;
         addScore(200 * 2 ** (frightenedChain - 1));
         Object.assign(ghost, makeActor(ghost.spawn, ghost.index % 2 ? "left" : "right", ghost.speed), {index: ghost.index});
         beep(880, .12, .06);
         flash(`${200 * 2 ** (frightenedChain - 1)} POINTS`);
-      } else {
-        loseLife(now);
       }
-      break;
+    } else {
+      loseLife(now);
     }
   }
 
@@ -370,19 +386,22 @@
     } catch { /* Audio is optional. */ }
   }
 
-  function roundedRect(x, y, w, h, radius) {
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, radius);
+  function roundedRect(target, x, y, w, h, radius) {
+    target.beginPath();
+    target.roundRect(x, y, w, h, radius);
   }
 
-  function drawMaze(now) {
-    ctx.save();
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    const background = ctx.createRadialGradient(WIDTH*.5, HEIGHT*.45, 20, WIDTH*.5, HEIGHT*.45, WIDTH*.7);
+  function renderMazeLayer() {
+    // Prerender the static maze: background, walls, uneaten regular pellets.
+    // Called on board reset and each pellet pickup — never per frame.
+    const m = mazeCtx;
+    m.save();
+    m.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const background = m.createRadialGradient(WIDTH*.5, HEIGHT*.45, 20, WIDTH*.5, HEIGHT*.45, WIDTH*.7);
     background.addColorStop(0, "#191022");
     background.addColorStop(1, "#0b0710");
-    ctx.fillStyle = background;
-    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    m.fillStyle = background;
+    m.fillRect(0, 0, WIDTH, HEIGHT);
 
     for (let y = 0; y < ROWS; y++) {
       for (let x = 0; x < COLS; x++) {
@@ -390,27 +409,49 @@
         const px = x * TILE;
         const py = y * TILE;
         if (cell === "#") {
-          ctx.shadowColor = "rgba(255, 76, 112, .32)";
-          ctx.shadowBlur = 7;
-          roundedRect(px + 2, py + 2, TILE - 4, TILE - 4, 4);
-          ctx.fillStyle = "#29152f";
-          ctx.fill();
-          ctx.shadowBlur = 0;
-          ctx.strokeStyle = "rgba(255, 105, 95, .48)";
-          ctx.lineWidth = 1;
-          ctx.stroke();
-          ctx.fillStyle = "rgba(255, 216, 172, .035)";
-          ctx.fillRect(px + 5, py + 5, TILE - 10, 2);
-        } else if (cell === "." || cell === "o") {
-          const pulse = cell === "o" ? 1 + Math.sin(now / 115) * .18 : 1;
-          const size = (cell === "o" ? 11 : 5) * pulse;
-          ctx.shadowColor = "#ff554f";
-          ctx.shadowBlur = cell === "o" ? 13 : 5;
-          ctx.fillStyle = cell === "o" ? "#ffb066" : "#ff695f";
-          roundedRect(px + TILE/2 - size/2, py + TILE/2 - size/2, size, size, cell === "o" ? 3 : 1);
-          ctx.fill();
-          ctx.shadowBlur = 0;
+          m.shadowColor = "rgba(255, 76, 112, .32)";
+          m.shadowBlur = 7;
+          roundedRect(m, px + 2, py + 2, TILE - 4, TILE - 4, 4);
+          m.fillStyle = "#29152f";
+          m.fill();
+          m.shadowBlur = 0;
+          m.strokeStyle = "rgba(255, 105, 95, .48)";
+          m.lineWidth = 1;
+          m.stroke();
+          m.fillStyle = "rgba(255, 216, 172, .035)";
+          m.fillRect(px + 5, py + 5, TILE - 10, 2);
+        } else if (cell === ".") {
+          m.shadowColor = "#ff554f";
+          m.shadowBlur = 5;
+          m.fillStyle = "#ff695f";
+          roundedRect(m, px + TILE/2 - 2.5, py + TILE/2 - 2.5, 5, 5, 1);
+          m.fill();
+          m.shadowBlur = 0;
         }
+      }
+    }
+    m.restore();
+  }
+
+  function drawMaze(now) {
+    // Per frame: blit the prerendered maze, then draw only the animated power pellets.
+    ctx.save();
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(mazeLayer, 0, 0, WIDTH, HEIGHT);
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        if (grid[y]?.[x] !== "o") continue;
+        const pulse = 1 + Math.sin(now / 115) * .18;
+        const size = 11 * pulse;
+        const px = x * TILE;
+        const py = y * TILE;
+        ctx.shadowColor = "#ff554f";
+        ctx.shadowBlur = 13;
+        ctx.fillStyle = "#ffb066";
+        roundedRect(ctx, px + TILE/2 - size/2, py + TILE/2 - size/2, size, size, 3);
+        ctx.fill();
+        ctx.shadowBlur = 0;
       }
     }
     ctx.restore();
@@ -418,17 +459,43 @@
 
   function drawPlayer(now) {
     const p = actorPosition(player);
-    const open = Math.floor(now / 115) % 2;
-    const directionOffset = { right: 0, left: 2, up: 4, down: 6 }[player.dir] ?? 0;
-    const index = directionOffset + open;
-    const sourceX = (index % 4) * 128;
-    const sourceY = Math.floor(index / 4) * 128;
     const size = TILE * 2.05;
+    const cx = p.x * TILE + TILE / 2;
+    const cy = p.y * TILE + TILE / 2;
     ctx.save();
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.shadowColor = "rgba(255, 213, 173, .48)";
     ctx.shadowBlur = 8;
-    ctx.drawImage(spriteAtlas, sourceX, sourceY, 128, 128, p.x*TILE + TILE/2 - size/2, p.y*TILE + TILE/2 - size/2, size, size);
+    if (!spriteFailed && spriteAtlas.complete && spriteAtlas.naturalWidth > 0) {
+      const open = Math.floor(now / 115) % 2;
+      const directionOffset = { right: 0, left: 2, up: 4, down: 6 }[player.dir] ?? 0;
+      const index = directionOffset + open;
+      const sourceX = (index % 4) * 128;
+      const sourceY = Math.floor(index / 4) * 128;
+      ctx.drawImage(spriteAtlas, sourceX, sourceY, 128, 128, cx - size/2, cy - size/2, size, size);
+    } else {
+      // Sprite failed to load — fall back to a simple portrait disc so the player is never invisible.
+      ctx.fillStyle = "#ff695f";
+      ctx.beginPath();
+      ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      const d = DIRECTIONS[player.dir] ?? DIRECTIONS.right;
+      const ex = d.x * 4;
+      const ey = d.y * 4;
+      ctx.fillStyle = "#120c1d";
+      ctx.beginPath();
+      ctx.arc(cx - 8 + ex, cy - 4 + ey, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(cx + 8 + ex, cy - 4 + ey, 3.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#120c1d";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx + d.x * 6, cy + 4 + d.y * 6, 7, Math.PI * 0.15, Math.PI * 0.85);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
@@ -482,7 +549,7 @@
 
   function render(now) {
     drawMaze(now);
-    if (spriteAtlas.complete) drawPlayer(now);
+    drawPlayer(now);
     ghosts.forEach(ghost => drawGhost(ghost, now));
     if (state === "dying") {
       ctx.save();
